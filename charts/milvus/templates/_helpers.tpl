@@ -6,6 +6,10 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "milvus.namespace" -}}
+{{- .Release.Namespace -}}
+{{- end -}}
+
 {{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
@@ -117,6 +121,40 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 {{- end -}}
 {{- end -}}
 
+{{/*
+Create a default failly qualified logstore name.
+*/}}
+{{- define "milvus.logstore.fullname" -}}
+{{- $name := .Values.logstore.name -}}
+{{- if contains $name .Release.Name -}}
+{{ .Release.Name }}
+{{- else -}}
+{{ .Release.Name }}-log
+{{- end -}}
+{{- end -}}
+
+{{- define "milvus.logstore.zk.fullname" -}}
+{{ template "milvus.logstore.fullname" . }}-zk
+{{- end -}}
+
+{{- define "milvus.logstore.bookie.fullname" -}}
+{{ template "milvus.logstore.fullname" . }}-bookie
+{{- end -}}
+
+{{- define "milvus.logstore.proxy.fullname" -}}
+{{ template "milvus.logstore.fullname" . }}-proxy
+{{- end -}}
+
+{{- define "milvus.tikv.fullname" }}
+{{- $name := .Values.tikv.name -}}
+{{- if contains $name .Release.Name -}}
+{{ .Release.Name }}
+{{- else -}}
+{{ .Release.Name }}-tikv
+{{- end -}}
+{{- end -}}
+
+{{/*
 {/*
 Create a default fully qualified attu name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).

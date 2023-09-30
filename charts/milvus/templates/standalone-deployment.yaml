@@ -129,6 +129,12 @@ spec:
           mountPath: /milvus/configs/user.yaml
           subPath: user.yaml
           readOnly: true
+        {{- if .Values.logstore.enabled }}
+        - name: milvus-config
+          mountPath: /milvus/configs/logstore.yaml
+          subPath: logstore.yaml
+          readOnly: true
+        {{- end }}
         - name: milvus-data-disk
           mountPath: {{ .Values.standalone.persistence.mountPath | quote }}
           subPath: {{ .Values.standalone.persistence.persistentVolumeClaim.subPath | default "" }}

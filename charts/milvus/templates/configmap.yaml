@@ -10,3 +10,7 @@ data:
   {{ $key }}: |-
 {{ $value | indent 4 }}
 {{- end }}
+{{- if .Values.logstore.enabled }}
+  logstore.yaml: |+
+    {{- include "milvus.logstore.config" . | nindent 4 }}
+{{- end }}

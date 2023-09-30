@@ -1,0 +1,547 @@
+{{- if .Values.logstore.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: proxy
+  name: {{ template "milvus.logstore.proxy.fullname" . }}
+spec:
+  ports:
+  - name: proxy
+    port: 9999
+    protocol: TCP
+    targetPort: proxy
+  selector:
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: proxy
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: bookie
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: bookie
+  name: {{ template "milvus.logstore.proxy.fullname" . }}-headless
+spec:
+  clusterIP: None
+  ports:
+  - name: proxy
+    port: 9999
+    protocol: TCP
+    targetPort: proxy
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: proxy
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: {{ template "milvus.logstore.proxy.fullname" . }}-config
+data:
+  bk-proxy.conf: |+
+    # bk proxy settings
+    ## zk root path for bk proxy.
+    bkProxyZkRootPath=/bkproxy
+    ## bk proxy shutdown timeout in milliseconds.
+    bkProxyShutdownTimeoutMS=5000
+    ## bk proxy init check interval in milliseconds, available when using init-check.
+    bkProxyInitCheckIntervalMS=5000
+    ## bk proxy init check expected available bookies, available when using init-check.
+    bkProxyInitCheckExpectedAvailableBookies=3
+    ## bk proxy init check retry times, available when using init-check.
+    bkProxyInitCheckRetryTimes=100
+    ## bk proxy grpc port.
+    bkProxyGRPCPort=9999
+    ## bk proxy grpc inbound message size.
+    bkProxyGRPCInboundMessageSize=104857600
+    ## bk proxy enable grpc access log, available values: servicer, bookkeeper, ledger.
+    bkProxyEnableGRPCAccessLog=servicer,bookkeeper
+    ## bk proxy handler expire timeout in milliseconds.
+    bkProxyHandlerExpireTimeoutMS=60000
+    ## bk proxy http port.
+    bkProxyHTTPPort=9998
+    ## bk proxy http health check entries count per operation.
+    bkProxyHTTPHealthCheckEntriesCount=10
+    ## bk proxy http health check path.
+    bkProxyHTTPHealthCheckPath=/health_check
+    ## bk proxy http metrics path.
+    bkProxyHTTPMetricsPath=/metrics
+    ## bk proxy expose default jvm metrics.
+    bkProxyExposeDefaultJVMMetrics=true
+    ## bk proxy bookkeeper client metric rollover seconds.
+    bkProxyBKClientStatsLatencyRolloverSeconds=60
+    ## bk proxy service discovery zk re-watch timeout in milliseconds.
+    bkProxyServiceDiscoveryZKReWatchTimeout=200
+    ## bk proxy health check for grpc service, if grpc service status code hit, bk proxy will record the request as a unhealthy request.
+    bkProxyHealthCheckGRPCUnhealthyCode=UNAVAILABLE,UNKNOWN
+    ## bk proxy health check for grpc service, if unhealty request count in interval given by bkProxyHealthCheckIntervalMS exceeds the threshold
+    ## bk proxy will mark the grpc service as unhealthy.
+    bkProxyHealthCheckGRPCUnhealthyThresholdPerInterval=25
+    ## bk proxy health check for grpc service (unit %), if unhealty request percent in interval given by bkProxyHealthCheckIntervalMS exceeds the threshold
+    ## bk proxy will mark the grpc service as unhealthy.
+    bkProxyHealthCheckGRPCUnhealthyPercentPerInterval=5
+    ## bk proxy health check interval in milliseconds.
+    bkProxyHealthCheckIntervalMS=15000
+
+    # bookkeeper client settings, part of available config can be found at https://bookkeeper.apache.org/docs/reference/config/
+    zkServers={{ template "milvus.logstore.zk.fullname" .}}:2181
+    zkTimeout=10000
+    throttle=10000
+    addEntryTimeoutSec=5
+    readEntryTimeoutSec=5
+    bookieHealthCheckEnabled=true
+    nettyMaxFrameSizeBytes=104857600
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: proxy
+  name: {{ template "milvus.logstore.proxy.fullname" . }}
+spec:
+  serviceName: {{ template "milvus.logstore.proxy.fullname" . }}-headless
+  replicas: {{ .Values.logstore.proxy.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: proxy
+      app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+      app.kubernetes.io/name: proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: proxy
+        app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+        app.kubernetes.io/name: proxy
+    spec:
+      volumes:
+      - name: config
+        configMap:
+          name: {{ template "milvus.logstore.proxy.fullname" . }}-config
+      initContainers:
+      - name: wait-for-bookie-ready
+        image: {{ .Values.logstore.proxy.image }}
+        command:
+        - /bk-proxy/bin/init-check
+        volumeMounts:
+        - name: config
+          mountPath: /bk-proxy/configs/bk-proxy.conf
+          subPath: bk-proxy.conf
+          readOnly: true
+      containers:
+      - name: proxy
+        image: {{ .Values.logstore.proxy.image }}
+        resources:
+          {{- toYaml .Values.logstore.proxy.resources | nindent 10 }}
+        ports:
+        - name: proxy
+          protocol: TCP
+          containerPort: 9999
+        volumeMounts:
+        - name: config
+          mountPath: /bk-proxy/configs/bk-proxy.conf
+          subPath: bk-proxy.conf
+          readOnly: true
+        startupProbe:
+          failureThreshold: 15
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 9998
+          timeoutSeconds: 1
+        livenessProbe:
+          httpGet:
+            path: /health_check
+            port: 9998
+            scheme: HTTP
+          periodSeconds: 15
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /health_check
+            port: 9998
+            scheme: HTTP
+          periodSeconds: 15
+          timeoutSeconds: 3
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/component: zookeeper
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: zookeeper
+  name: {{ template "milvus.logstore.zk.fullname" . }}
+spec:
+  podManagementPolicy: Parallel
+  replicas: {{ .Values.logstore.zk.replicaCount }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: zookeeper
+      app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+      app.kubernetes.io/name: zookeeper
+  serviceName: {{ template "milvus.logstore.zk.fullname" . }}-headless
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: zookeeper
+        app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+        app.kubernetes.io/name: zookeeper
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: zookeeper
+                  app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+                  app.kubernetes.io/name: zookeeper
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+      containers:
+      - command:
+        - /scripts/setup.sh
+        env:
+        - name: BITNAMI_DEBUG
+          value: "false"
+        - name: ZOO_PORT_NUMBER
+          value: "2181"
+        - name: ZOO_TICK_TIME
+          value: "2000"
+        - name: ZOO_INIT_LIMIT
+          value: "10"
+        - name: ZOO_SYNC_LIMIT
+          value: "5"
+        - name: ZOO_PRE_ALLOC_SIZE
+          value: "65536"
+        - name: ZOO_SNAPCOUNT
+          value: "100000"
+        - name: ZOO_MAX_CLIENT_CNXNS
+          value: "60"
+        - name: ZOO_4LW_COMMANDS_WHITELIST
+          value: srvr, mntr, ruok
+        - name: ZOO_LISTEN_ALLIPS_ENABLED
+          value: "no"
+        - name: ZOO_AUTOPURGE_INTERVAL
+          value: "0"
+        - name: ZOO_AUTOPURGE_RETAIN_COUNT
+          value: "3"
+        - name: ZOO_MAX_SESSION_TIMEOUT
+          value: "40000"
+        - name: ZOO_SERVERS
+          {{- $replicaCount := int .Values.logstore.zk.replicaCount }}
+          {{- $minServerId := 1 }}
+          {{- $followerPort := 2888 }}
+          {{- $electionPort := 3888 }}
+          {{- $releaseNamespace := include "milvus.namespace" . }}
+          {{- $zookeeperFullname := include "milvus.logstore.zk.fullname" . }}
+          {{- $zookeeperHeadlessServiceName := printf "%s-%s" $zookeeperFullname "headless" | trunc 63  }}
+          {{- $clusterDomain := "cluster.local" }}
+          value: {{ range $i, $e := until $replicaCount }}{{ $zookeeperFullname }}-{{ $e }}.{{ $zookeeperHeadlessServiceName }}.{{ $releaseNamespace }}.svc.{{ $clusterDomain }}:{{ $followerPort }}:{{ $electionPort }}::{{ add $e $minServerId }} {{ end }}
+        - name: ZOO_ENABLE_AUTH
+          value: "no"
+        - name: ZOO_ENABLE_QUORUM_AUTH
+          value: "no"
+        - name: ZOO_HEAP_SIZE
+          value: "1024"
+        - name: ZOO_LOG_LEVEL
+          value: ERROR
+        - name: ALLOW_ANONYMOUS_LOGIN
+          value: "yes"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        image: docker.io/bitnami/zookeeper:3.8.1-debian-11-r36
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - echo "ruok" | timeout 2 nc -w 2 localhost 2181 | grep imok
+          failureThreshold: 6
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: zookeeper
+        ports:
+        - containerPort: 2181
+          name: client
+          protocol: TCP
+        - containerPort: 2888
+          name: follower
+          protocol: TCP
+        - containerPort: 3888
+          name: election
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - echo "ruok" | timeout 2 nc -w 2 localhost 2181 | grep imok
+          failureThreshold: 6
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+          {{- toYaml .Values.logstore.zk.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+        startupProbe:
+          failureThreshold: 15
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: client
+          timeoutSeconds: 1
+        volumeMounts:
+        - mountPath: /scripts/setup.sh
+          name: scripts
+          subPath: setup.sh
+        - mountPath: /bitnami/zookeeper
+          name: data
+      securityContext:
+        fsGroup: 1001
+      volumes:
+      - configMap:
+          defaultMode: 493
+          name: {{ template "milvus.logstore.zk.fullname" . }}-scripts
+        name: scripts
+      {{- if not .Values.logstore.zk.persistence.enabled }}
+      - name: data
+        emptyDir: {}
+      {{- end }}
+  {{- if .Values.logstore.zk.persistence.enabled }}
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.logstore.zk.persistence.size }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: zookeeper
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: zookeeper
+  name: {{ template "milvus.logstore.zk.fullname" . }}-headless
+spec:
+  clusterIP: None
+  ports:
+  - name: tcp-client
+    port: 2181
+    protocol: TCP
+    targetPort: client
+  - name: tcp-follower
+    port: 2888
+    protocol: TCP
+    targetPort: follower
+  - name: tcp-election
+    port: 3888
+    protocol: TCP
+    targetPort: election
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/component: zookeeper
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: zookeeper
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: zookeeper
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: zookeeper
+  name: {{ template "milvus.logstore.zk.fullname" . }}
+spec:
+  ports:
+  - name: tcp-client
+    port: 2181
+    protocol: TCP
+    targetPort: client
+  - name: tcp-follower
+    port: 2888
+    protocol: TCP
+    targetPort: follower
+  - name: tcp-election
+    port: 3888
+    protocol: TCP
+    targetPort: election
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/component: zookeeper
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: zookeeper
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: zookeeper
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: zookeeper
+  name: {{ template "milvus.logstore.zk.fullname" . }}-scripts
+data:
+  setup.sh: |-
+    #!/bin/bash
+
+    # Execute entrypoint as usual after obtaining ZOO_SERVER_ID
+    # check ZOO_SERVER_ID in persistent volume via myid
+    # if not present, set based on POD hostname
+    if [[ -f "/bitnami/zookeeper/data/myid" ]]; then
+        export ZOO_SERVER_ID="$(cat /bitnami/zookeeper/data/myid)"
+    else
+        HOSTNAME="$(hostname -s)"
+        if [[ $HOSTNAME =~ (.*)-([0-9]+)$ ]]; then
+            ORD=${BASH_REMATCH[2]}
+            export ZOO_SERVER_ID="$((ORD + {{ .Values.logstore.zk.minServerId }} ))"
+        else
+            echo "Failed to get index from hostname $HOSTNAME"
+            exit 1
+        fi
+    fi
+    exec /entrypoint.sh /run.sh
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: {{ template "milvus.logstore.bookie.fullname" . }}-config
+data:
+    BK_BOOKIE_EXTRA_OPTS: "\"{{ .Values.logstore.bookie.configData.extraOpts }}\""
+    BK_bookiePort: "3181"
+    BK_bookieGrpcPort: "4181"
+    BK_nettyMaxFrameSizeBytes: "104857600"
+    BK_enableStatistics: "true"
+    BK_journalDirectory: "/bookkeeper/data/journal"
+    BK_ledgerDirectories: "/bookkeeper/data/ledgers"
+    BK_indexDirectories: "/bookkeeper/data/ledgers"
+    BK_zkServers: {{ template "milvus.logstore.zk.fullname" . }}
+    BK_useHostNameAsBookieID: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: bookie
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: bookie
+  name: {{ template "milvus.logstore.bookie.fullname" . }}-headless
+spec:
+  clusterIP: None
+  ports:
+  - name: bookie
+    port: 3181
+    protocol: TCP
+    targetPort: bookie
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/component: bookie
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: bookie
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "milvus.logstore.bookie.fullname" . }}
+  labels:
+    app.kubernetes.io/component: bookie
+    app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+    app.kubernetes.io/name: bookie
+spec:
+  serviceName: {{ template "milvus.logstore.bookie.fullname" . }}-headless
+  replicas: {{ .Values.logstore.bookie.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: bookie
+      app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+      app.kubernetes.io/name: bookie
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: bookie
+        app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+        app.kubernetes.io/name: bookie
+    spec:
+      containers:
+      - name: bookie
+        image: {{ .Values.logstore.bookie.image }}
+        resources:
+          {{- toYaml .Values.logstore.bookie.resources | nindent 10 }}
+        ports:
+          - name: bookie
+            containerPort: 3181
+        envFrom:
+          - configMapRef:
+              name: {{ template "milvus.logstore.bookie.fullname" . }}-config
+        volumeMounts:
+          - name: journal
+            mountPath: /bookkeeper/data/journal
+          - name: ledgers
+            mountPath: /bookkeeper/data/ledgers
+      {{- if not .Values.logstore.bookie.persistence.enabled }}
+      volumes:
+      - name: journal
+        emptyDir: {}
+      - name: ledgers
+      {{- end }}
+  {{- if .Values.logstore.bookie.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: journal
+        labels:
+          app.kubernetes.io/component: bookie
+          app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+          app.kubernetes.io/name: bookie
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.logstore.bookie.persistence.journal.size }}
+    - metadata:
+        name: ledgers
+        labels:
+          app.kubernetes.io/component: bookie
+          app.kubernetes.io/instance: {{ template "milvus.logstore.fullname" . }}
+          app.kubernetes.io/name: bookie
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.logstore.bookie.persistence.ledgers.size }}
+  {{- end }}
+{{- end }}

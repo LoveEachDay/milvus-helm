@@ -4,8 +4,8 @@ cluster:
 
 image:
   all:
-    repository: milvusdb/milvus
-    tag: v2.3.1
+    repository: harbor.milvus.io/logstore/milvus
+    tag: 2.3.0-20231006-40f3dd6-42e225a
     pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
     ## Secrets must be manually created in the namespace.
@@ -46,10 +46,8 @@ annotations: {}
 # in the image and helm chart.
 extraConfigFiles:
   user.yaml: |+
-    #    For example enable rest http for milvus proxy
-    #    proxy:
-    #      http:
-    #        enabled: true
+    pulsar:
+      enableClientMetrics: true
 
 ## Expose the Milvus service to be accessed from outside the cluster (LoadBalancer service).
 ## or access it from within the cluster (ClusterIP service). Set the service type and the port to serve it.
@@ -372,7 +370,7 @@ dataNode:
     enabled: false  # Enable live profiling
 
 ## mixCoordinator contains all coord
-## If you want to use mixcoord, enable this and disable all of other coords 
+## If you want to use mixcoord, enable this and disable all of other coords
 mixCoordinator:
   enabled: false
   # You can set the number of replicas greater than 1, only if enable active standby
@@ -852,6 +850,65 @@ mysql:
       accessModes:
         - ReadWriteOnce
       size: 100Gi
+
+## Configuration values for the tikv dependency
+## tikv used for meta store is testing internally
+tikv:
+  enabled: false
+  name: tikv
+  service:
+    port: 2379
+  pd:
+    replicaCount: 1
+    resources: {}
+    image: harbor.milvus.io/qa/pingcap-pd:v7.1.0
+    persistence:
+      enabled: true
+      size: 20Gi
+  config: {}
+  tikv:
+    image: harbor.milvus.io/qa/pingcap-tikv:v7.1.0
+    replicaCount: 3
+    resources: {}
+    persistence:
+      enabled: true
+      size: 200Gi
+
+## Configuration values for the apache bookkeeper dependency
+## bookkeeper used for message queue is testing internally
+logstore:
+  enabled: false
+  name: log
+  service:
+    port: 9999
+  proxy:
+    resources: {}
+    replicaCount: 1
+    image: harbor.milvus.io/logstore/bk-proxy:0.1-5c6a364c1deee6336e7a4e0f719b1db1fb846d9d-1696663652
+  bookie:
+    replicaCount: 4
+    image: harbor.milvus.io/logstore/bookkeeper:4.16.2
+    configData:
+      extraOpts: "-Xms4g -Xmx4g -XX:MaxDirectMemorySize=8g -XX:+UseG1GC  -XX:MaxGCPauseMillis=10 -XX:+ParallelRefProcEnabled -XX:+UnlockExperimentalVMOptions -XX:+AggressiveOpts -XX:+DoEscapeAnalysis -XX:ParallelGCThreads=32 -XX:ConcGCThreads=32 -XX:G1NewSizePercent=50 -XX:+DisableExplicitGC -XX:-ResizePLAB"
+    resources: {}
+    persistence:
+      enabled: true
+      journal:
+        size: 10Gi
+      ledgers:
+        size: 500Gi
+
+  zk:
+    replicaCount: 3
+    minServerId: 1
+    resources:
+      requests:
+        memory: 1Gi
+        cpu: 500m
+    persistence:
+      enabled: true
+      size: 8Gi
+
 
 ###################################
 # External S3

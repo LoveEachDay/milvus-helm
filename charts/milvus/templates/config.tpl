@@ -25,9 +25,16 @@ etcd:
 {{- end }}
 {{- end }}
 
+{{- if .Values.tikv.enabled }}
+tikv:
+  endpoints: {{ template "milvus.tikv.fullname" . }}-pd:{{ .Values.tikv.service.port }}
+{{- end }}
+
 metastore:
 {{- if or .Values.mysql.enabled .Values.externalMysql.enabled }}
   type: mysql
+{{- else if .Values.tikv.enabled }}
+  type: tikv
 {{- else }}
   type: etcd
 {{- end }}
@@ -163,6 +170,14 @@ kafka:
 {{- end }}
 {{- end }}
 
+{{- if .Values.logstore.enabled }}
+
+mq:
+  type: pulsar
+
+messageQueue: pulsar
+{{- end }}
+
 {{- if not .Values.cluster.enabled }}
 {{- if or (eq .Values.standalone.messageQueue "rocksmq") (eq .Values.standalone.messageQueue "natsmq") }}
 
@@ -247,4 +262,31 @@ log:
     maxBackups: {{ .Values.log.file.maxBackups }}
   format: {{ .Values.log.format }}
 
+{{- end }}
+
+{{- define "milvus.logstore.config" }}
+env: prod
+tikv:
+  pdAddr:
+  - {{ template "milvus.tikv.fullname" . }}-pd:{{ .Values.tikv.service.port }}
+  callTimeout: 5s
+bkProxy:
+  addr: {{ template "milvus.logstore.fullname" . }}-proxy:{{ .Values.logstore.service.port }}
+  callTimeout: 5s
+dlog:
+  ensSize: 3
+  writeQuorum: 3
+  ackQuorum: 2
+  digestType: "CRC32"
+  rotation:
+    maxBytes: 1073741824
+  bgTaskInterval: 1m
+  writeCacheSize: 64
+zapLogger:
+  level: "info"
+  encoding: "console"
+  outputPaths:
+    - "stderr"
+  errorOutputPaths:
+    - "stderr"
 {{- end }}
