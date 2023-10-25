@@ -7,12 +7,12 @@ dependencies:
   version: 8.0.17
 - name: pulsar
   repository: https://pulsar.apache.org/charts
-  version: 2.7.8
+  version: 3.0.0
 - name: kafka
   repository: https://raw.githubusercontent.com/bitnami/charts/pre-2022/bitnami
   version: 15.5.1
 - name: mysql
   repository: https://raw.githubusercontent.com/bitnami/charts/pre-2022/bitnami
   version: 8.5.3
-digest: sha256:7810d86cff203549e8b9dbd8d4776cac1267a62087c80cdb5104dc475e952e9f
-generated: "2023-08-17T18:00:58.85315+08:00"
+digest: sha256:113ec3db01ac5f9885164e7c61cc5439bad9bed47d2d258ba41456fb373a61eb
+generated: "2023-10-25T16:00:44.308524+08:00"
