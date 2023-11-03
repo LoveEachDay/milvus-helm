@@ -5,7 +5,7 @@ cluster:
 image:
   all:
     repository: harbor.milvus.io/logstore/milvus
-    tag: 0.1-206e8cc2dc8172baf2d6c6ea0b2b279c25d6ede8-1699278017-alpine
+    tag: 2.3-20231103-5d2c721-2af3636
     pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
     ## Secrets must be manually created in the namespace.
@@ -46,22 +46,8 @@ annotations: {}
 # in the image and helm chart.
 extraConfigFiles:
   user.yaml: |+
-<<<<<<< HEAD
-    #    For example enable rest http for milvus proxy
-    #    proxy:
-    #      http:
-    #        enabled: true
-    ##  Enable tlsMode and set the tls cert and key
-    #  tls:
-    #    serverPemPath: /etc/milvus/certs/tls.crt
-    #    serverKeyPath: /etc/milvus/certs/tls.key
-    #   common:
-    #     security:
-    #       tlsMode: 1
-=======
     pulsar:
       enableClientMetrics: true
->>>>>>> 48d8395 (Add custom meta and log store)
 
 ## Expose the Milvus service to be accessed from outside the cluster (LoadBalancer service).
 ## or access it from within the cluster (ClusterIP service). Set the service type and the port to serve it.

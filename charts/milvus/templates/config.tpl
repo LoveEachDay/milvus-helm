@@ -279,7 +279,7 @@ dlog:
   {{- if .Values.logstore.enabled }}
   namespace: {{ .Values.logstore.namespace }}
   {{- end }}
-  {{- if and .Values.externalLogstore.enabled (not .Values.logstore.enabled) }
+  {{- if and .Values.externalLogstore.enabled (not .Values.logstore.enabled) }}
   namespace: {{ .Values.externalLogstore.namespace }}
   {{- end }}
   ackQuorum: 2
