@@ -265,12 +265,10 @@ tikv:
 bkProxy:
   {{- if .Values.logstore.enabled }}
   addr: {{ template "milvus.logstore.fullname" . }}-proxy:{{ .Values.logstore.service.port }}
-  namespace: {{ .Values.logstore.namespace }}
   callTimeout: 5s
   {{- end }}
   {{- if and .Values.externalLogstore.enabled (not .Values.logstore.enabled) }}
   addr: {{ .Values.externalLogstore.addr }}
-  namespace: {{ .Values.externalLogstore.namespace }}
   callTimeout: 5s
   {{- end }}
 dlog:
@@ -278,6 +276,12 @@ dlog:
   readAheadBufSize: 256
   ensSize: 3
   writeQuorum: 3
+  {{- if .Values.logstore.enabled }}
+  namespace: {{ .Values.logstore.namespace }}
+  {{- end }}
+  {{- if and .Values.externalLogstore.enabled (not .Values.logstore.enabled) }
+  namespace: {{ .Values.externalLogstore.namespace }}
+  {{- end }}
   ackQuorum: 2
   digestType: "CRC32"
   rotation:
