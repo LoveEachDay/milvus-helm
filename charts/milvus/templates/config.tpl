@@ -25,8 +25,27 @@ etcd:
 {{- end }}
 {{- end }}
 
+{{- if .Values.tikv.enabled }}
+tikv:
+  endpoints: {{ template "milvus.tikv.fullname" . }}-pd:{{ .Values.tikv.service.port }}
+  rootPath: {{ .Values.tikv.rootPath }}
+{{- end }}
+
+{{- if and .Values.externalTikv.enabled (not .Values.tikv.enabled) }}
+tikv:
+  endpoints:
+  {{- range .Values.externalTikv.endpoints }}
+  - {{ . }}
+  {{- end }}
+  rootPath: {{ .Values.externalTikv.rootPath }}
+{{- end }}
+
 metastore:
+{{- if or .Values.tikv.enabled .Values.externalTikv.enabled }}
+  type: tikv
+{{- else }}
   type: etcd
+{{- end }}
 
 {{- if and (.Values.externalS3.enabled) (eq .Values.externalS3.cloudProvider "azure") }}
 common:
@@ -134,6 +153,14 @@ kafka:
 {{- end }}
 {{- end }}
 
+{{- if or .Values.logstore.enabled .Values.externalLogstore.enabled }}
+
+mq:
+  type: pulsar
+
+messageQueue: pulsar
+{{- end }}
+
 {{- if not .Values.cluster.enabled }}
 {{- if or (eq .Values.standalone.messageQueue "rocksmq") (eq .Values.standalone.messageQueue "natsmq") }}
 
@@ -218,4 +245,50 @@ log:
     maxBackups: {{ .Values.log.file.maxBackups }}
   format: {{ .Values.log.format }}
 
+{{- end }}
+
+{{- define "milvus.logstore.config" }}
+env: prod
+tikv:
+  {{- if .Values.tikv.enabled }}
+  pdAddr:
+  - {{ template "milvus.tikv.fullname" . }}-pd:{{ .Values.tikv.service.port }}
+  callTimeout: 5s
+  {{- end}}
+  {{- if and .Values.externalTikv.enabled (not .Values.tikv.enabled) }}
+  pdAddr:
+  {{- range .Values.externalTikv.endpoints }}
+  - {{ . }}
+  {{- end }}
+  callTimeout: 5s
+  {{- end }}
+bkProxy:
+  {{- if .Values.logstore.enabled }}
+  addr: {{ template "milvus.logstore.fullname" . }}-proxy:{{ .Values.logstore.service.port }}
+  namespace: {{ .Values.logstore.namespace }}
+  callTimeout: 5s
+  {{- end }}
+  {{- if and .Values.externalLogstore.enabled (not .Values.logstore.enabled) }}
+  addr: {{ .Values.externalLogstore.addr }}
+  namespace: {{ .Values.externalLogstore.namespace }}
+  callTimeout: 5s
+  {{- end }}
+dlog:
+  maxReadBatchSize: 10
+  readAheadBufSize: 256
+  ensSize: 3
+  writeQuorum: 3
+  ackQuorum: 2
+  digestType: "CRC32"
+  rotation:
+    maxBytes: 1073741824
+  bgTaskInterval: 1m
+  writeCacheSize: 64
+zapLogger:
+  level: "info"
+  encoding: "console"
+  outputPaths:
+    - "stderr"
+  errorOutputPaths:
+    - "stderr"
 {{- end }}

@@ -4,8 +4,8 @@ cluster:
 
 image:
   all:
-    repository: milvusdb/milvus
-    tag: v2.3.4
+    repository: harbor.milvus.io/logstore/milvus
+    tag: 0.1-206e8cc2dc8172baf2d6c6ea0b2b279c25d6ede8-1699278017-alpine
     pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
     ## Secrets must be manually created in the namespace.
@@ -46,6 +46,7 @@ annotations: {}
 # in the image and helm chart.
 extraConfigFiles:
   user.yaml: |+
+<<<<<<< HEAD
     #    For example enable rest http for milvus proxy
     #    proxy:
     #      http:
@@ -57,6 +58,10 @@ extraConfigFiles:
     #   common:
     #     security:
     #       tlsMode: 1
+=======
+    pulsar:
+      enableClientMetrics: true
+>>>>>>> 48d8395 (Add custom meta and log store)
 
 ## Expose the Milvus service to be accessed from outside the cluster (LoadBalancer service).
 ## or access it from within the cluster (ClusterIP service). Set the service type and the port to serve it.
@@ -399,7 +404,7 @@ dataNode:
     enabled: false  # Enable live profiling
 
 ## mixCoordinator contains all coord
-## If you want to use mixcoord, enable this and disable all of other coords 
+## If you want to use mixcoord, enable this and disable all of other coords
 mixCoordinator:
   enabled: false
   # You can set the number of replicas greater than 1, only if enable active standby
@@ -847,6 +852,81 @@ kafka:
     enabled: true
     replicaCount: 3
 
+## Configuration values for the tikv dependency
+## tikv used for meta store is testing internally
+tikv:
+  enabled: false
+  name: tikv
+  metrics:
+    enabled: false
+  service:
+    port: 2379
+  nodeSelector: {}
+  tolerations: []
+  rootPath: by-dev
+  pd:
+    replicaCount: 1
+    resources: {}
+    image: harbor.milvus.io/qa/pingcap-pd:v7.1.0
+    persistence:
+      enabled: true
+      size: 20Gi
+  config: {}
+  tikv:
+    image: harbor.milvus.io/qa/pingcap-tikv:v7.1.0
+    replicaCount: 3
+    resources: {}
+    persistence:
+      enabled: true
+      size: 200Gi
+
+## Configuration values for the apache bookkeeper dependency
+## bookkeeper used for message queue is testing internally
+logstore:
+  enabled: false
+  name: log
+  namespace: default
+  service:
+    port: 9999
+  metrics:
+    enabled: false
+  nodeSelector: {}
+  tolerations: []
+  proxy:
+    resources: {}
+    replicaCount: 1
+    image: harbor.milvus.io/logstore/bk-proxy:0.1-5c6a364c1deee6336e7a4e0f719b1db1fb846d9d-1696663652
+  bookie:
+    replicaCount: 4
+    image: harbor.milvus.io/logstore/bookkeeper:4.16.2
+    configData:
+      extraOpts: >
+        -Xms3g -Xmx3g -XX:MaxDirectMemorySize=6g  
+        -Dio.netty.recycler.maxCapacity.default=1000 -Dio.netty.recycler.linkCapacity=1024 
+        -XX:+AggressiveOpts -XX:+UseG1GC -XX:MaxGCPauseMillis=10 -XX:+ParallelRefProcEnabled 
+        -XX:+UnlockExperimentalVMOptions -XX:+DoEscapeAnalysis -XX:ParallelGCThreads=4 
+        -XX:ConcGCThreads=4 -XX:G1NewSizePercent=50 -XX:+DisableExplicitGC -XX:-ResizePLAB 
+        -XX:+ExitOnOutOfMemoryError -XX:+PerfDisableSharedMem
+        -XX:InitiatingHeapOccupancyPercent=30 -XX:G1MaxNewSizePercent=65
+    resources: {}
+    persistence:
+      enabled: true
+      journal:
+        size: 10Gi
+      ledgers:
+        size: 500Gi
+
+  zk:
+    replicaCount: 3
+    minServerId: 1
+    resources:
+      requests:
+        memory: 1Gi
+        cpu: 500m
+    persistence:
+      enabled: true
+      size: 8Gi
+
 ###################################
 # External S3
 # - these configs are only used when `externalS3.enabled` is true
@@ -910,3 +990,24 @@ externalKafka:
     mechanisms: PLAIN
     username: ""
     password: ""
+
+###################################
+# External tikv
+# - these configs are only used when `externalTikv.enabled` is true
+###################################
+externalTikv:
+  enabled: false
+  ## the endpoints of the external etcd
+  ##
+  endpoints:
+    - localhost:2379
+  rootPath: by-dev
+
+###################################
+# External logstore
+# - these configs are only used when `externalLogstore.enabled` is true
+###################################
+externalLogstore:
+  enabled: false
+  addr: localhost:9999
+  namespace: default
