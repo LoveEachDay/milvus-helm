@@ -11,7 +11,7 @@ cluster:
 image:
   all:
     repository: milvusdb/milvus
-    tag: v2.5.11
+    tag: master-20250515-9eebb9b4-amd64
     pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
     ## Secrets must be manually created in the namespace.
@@ -19,10 +19,6 @@ image:
     ##
     # pullSecrets:
     #   - myRegistryKeySecretName
-  tools:
-    repository: milvusdb/milvus-config-tool
-    tag: v0.1.2
-    pullPolicy: IfNotPresent
 
 # Global node selector
 # If set, this will apply to all milvus components
@@ -76,7 +72,7 @@ volumeMounts: []
 # cluster mode with pulsar message queue.
 # Experimental feature, not recommended for production.
 streaming:
-  enabled: false
+  enabled: true
 
 ##
 ## If set, the whole config will be mounted from this custom ConfigMap.
@@ -251,7 +247,7 @@ standalone:
 
   ## Default message queue for milvus standalone
   ## Supported value: rocksmq, natsmq, pulsar, kafka and woodpecker
-  messageQueue: rocksmq
+  messageQueue: woodpecker
   persistence:
     mountPath: "/var/lib/milvus"
     ## If true, alertmanager will create/use a Persistent Volume Claim
@@ -437,7 +433,7 @@ indexCoordinator:
     clusterIP: ""
 
 indexNode:
-  enabled: true
+  enabled: false
   # You can set the number of replicas to -1 to remove the replicas field in case you want to use HPA
   replicas: 1
   resources: {}
@@ -908,8 +904,8 @@ pulsarv3:
         -XX:-ResizePLAB
         -XX:+ExitOnOutOfMemoryError
         -XX:+PerfDisableSharedMem
-      managedLedgerDefaultEnsembleSize: "3"
-      managedLedgerDefaultWriteQuorum: "3"
+      managedLedgerDefaultEnsembleSize: "2"
+      managedLedgerDefaultWriteQuorum: "2"
       managedLedgerDefaultAckQuorum: "2"
       maxMessageSize: "104857600"
       defaultRetentionTimeInMinutes: "10080"
