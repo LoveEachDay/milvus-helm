@@ -913,7 +913,7 @@ pulsarv3:
       backlogQuotaDefaultLimitGB: "8"
       ttlDurationDefaultInSeconds: "259200"
       subscriptionExpirationTimeMinutes: "3"
-      backlogQuotaDefaultRetentionPolicy: producer_exception
+      backlogQuotaDefaultRetentionPolicy: producer_request_hold
 
   proxy:
     pdb:
@@ -1123,7 +1123,7 @@ pulsar:
       backlogQuotaDefaultLimitGB: "8"
       ttlDurationDefaultInSeconds: "259200"
       subscriptionExpirationTimeMinutes: "3"
-      backlogQuotaDefaultRetentionPolicy: producer_exception
+      backlogQuotaDefaultRetentionPolicy: producer_request_hold
     pdb:
       usePolicy: false
 
